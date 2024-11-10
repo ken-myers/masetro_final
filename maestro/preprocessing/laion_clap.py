@@ -84,7 +84,7 @@ def _worker(args):
         )['input_features']
 
         # Save the processed audio file
-        torch.save(input_features, out_file)
+        torch.save(input_features.squeeze(0), out_file)
 
     return True
 
