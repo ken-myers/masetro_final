@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import shutil
 from pathlib import Path
+import os
 
 def gtzan_collate(batch):
     return {
@@ -10,7 +11,12 @@ def gtzan_collate(batch):
         'features': torch.stack([item['features'] for item in batch])
     }
 
-def train_gtzan_model(*, output_dir, clear_output_dir = False, ckpt_interval = None, train_loader, val_loader, model, epochs, device, optimizer, scheduler, label_ids):
+def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, device, optimizer, scheduler, label_ids,
+                      disable_tokenizers_parallelism = True, clear_output_dir = False, ckpt_interval = None):
+
+    if disable_tokenizers_parallelism:
+        print("Disabling tokenizers parallelism")
+        os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
     output_dir = Path(output_dir)
     
@@ -44,7 +50,7 @@ def train_gtzan_model(*, output_dir, clear_output_dir = False, ckpt_interval = N
             label_embeddings = model.get_text_features(label_ids)
 
             # Generate audio embeddings
-            audio_embeddings = model.get_audio(features)
+            audio_embeddings = model.get_audio_features(features)
             
             # Compute similarity between label embeddings and audio embeddings
             logits = torch.matmul(audio_embeddings, label_embeddings.T)
