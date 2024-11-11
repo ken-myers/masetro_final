@@ -67,20 +67,25 @@ def _worker(args):
     if waveform.shape[0] > 1:
         waveform = torch.mean(waveform, dim=0, keepdim=True)
     
-    # Now, convert to NumPy
-    audios_np = [waveform.squeeze(0).numpy()]
+    waveform = waveform.squeeze(0)
+    
+    
 
     if resample_only:
         # Save the resampled audio file
-        torch.save(audios_np, out_file)
+        torch.save(waveform, out_file)
     else:
+        # Now, convert to NumPy
+        audios_np = [waveform.numpy()]
+
         # Apply the processor
         input_features = processor(
             audios = audios_np,
             sampling_rate=target_sample_rate,
             return_tensors="pt",
             padding="repeatpad",
-            truncation="rand_trunc"
+            truncation="rand_trunc",
+            max_length_s=10
         )['input_features']
 
         # Save the processed audio file
