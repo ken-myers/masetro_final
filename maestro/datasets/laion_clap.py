@@ -5,12 +5,12 @@ from maestro.util import tqdm
 import json
 
 class LaionClapDataset(Dataset):
-    def __init__(self, features_dir, *, json_path=None, preload=False):
-        self.features_dir = Path(features_dir)
-
+    def __init__(self, audio_dir, *, json_path=None, preload=False, waveforms=False):
+        self.audio_dir = Path(audio_dir)
+        self.waveforms = waveforms
 
         if json_path is None:
-            json_path = self.features_dir / 'data.json'
+            json_path = self.audio_dir / 'data.json'
 
         with open(json_path, 'r') as f:
             self.data = json.load(f)
@@ -23,24 +23,28 @@ class LaionClapDataset(Dataset):
     def __len__(self):
         return len(self.data)
     
-    def _load_features(self, filename):
-        return torch.load((self.features_dir / filename).with_suffix('.pt'))
+    def _load_audio(self, filename):
+        return torch.load((self.audio_dir / (filename + ".pt") ))
     
     def __getitem__(self, idx):
 
         data = self.data[idx].copy()
-        
-        if self.preload:
-            features = self.features[idx]
+
+        if self.waveforms:
+            key = 'waveform'
         else:
-            features = self._load_features(data['filename'])
+            key = 'features'
+    
+
+        if self.preload:
+            audio = self.audios[idx]
+        else:
+            audio = self._load_audio(data['filename'])
         
-        data['features'] = features
+        data[key] = audio
 
         return data
 
     def _preload(self):
         pbar = tqdm(self.data, desc='Preloading features')
-        self.features = [self._load_features(item['filename']) for item in pbar]
-    
-    
+        self.audios = [self._load_audio(item['filename']) for item in pbar]
