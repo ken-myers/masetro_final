@@ -2,8 +2,10 @@ from maestro.util import tqdm
 import torch
 import numpy as np
 
-def eval_laion_clap(model, *, val_loader, label_embeddings, top=1, confusion_matrix=False):
+def eval_laion_clap(model, *, val_loader, label_embeddings, top=1, confusion_matrix=False, desc=None, leave=False):
     
+    desc = desc or "Evaluating accuracy"
+
     label_embeddings = label_embeddings.to(model.device)
 
     correct_labels = []
@@ -22,7 +24,7 @@ def eval_laion_clap(model, *, val_loader, label_embeddings, top=1, confusion_mat
     model.eval()
 
     with torch.no_grad():
-        for batch in tqdm(val_loader, desc="Evaluating accuracy"):
+        for batch in tqdm(val_loader, desc=desc, leave=leave):
             labels = batch['label'].to(model.device)
             features = batch['features'].to(model.device)
 
