@@ -9,7 +9,7 @@ from maestro.constants import source_to_label, label_to_source
 from contextlib import nullcontext
 import json
 import numpy as np
-
+from collections import Counter
 class GTZANLogEntry:
     def __init__(self, epoch, train_loss=None, val_loss=None,
                  accuracy=None, source_accuracies=None,
@@ -147,7 +147,7 @@ def _gtzan_cross_entropy_loss(criterion, *, label_embeddings, audio_embeddings, 
                                         labels=labels,
                                         temperature=temperature)
     else:
-        weighted_source_losses = [source_losses[source] * source_weights[source] for source in source_weights.keys()]
+        weighted_source_losses = [source_losses[source] * source_weights[source] for source in sources_present]
         batch_loss = sum(weighted_source_losses)
 
     return batch_loss, source_losses
@@ -159,11 +159,11 @@ def _gtzan_cross_entropy_loss_old(criterion, *, label_embeddings, audio_embeddin
 
 def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, device, optimizer, scheduler, label_ids, label_attn_masks,
                       loss_by_source=False ,source_weights=None, temperature = 1.0, disable_tokenizers_parallelism = True, clear_output_dir = False, 
-                      ckpt_interval = None, top_k=None, accuracy=False):
+                      ckpt_interval = None, top_k=None, save_graphs=False, save_cms=False):
     
     #Normalize source weights
     if source_weights is not None:
-        source_weights = {source: weight / sum(source_weights.values()) for source, weight in source_weights}
+        source_weights = {source: weight / sum(source_weights.values()) for source, weight in source_weights.items()}
 
     # Handle multi-val top k
     if top_k is not None:
@@ -197,6 +197,16 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
     # Init loss
     criterion = nn.CrossEntropyLoss(reduction='sum')
 
+    if loss_by_source:
+        # Count occurence of each source in tain train and val
+        train_sources = [item['source'] for item in train_loader.dataset]
+        val_sources = [item['source'] for item in val_loader.dataset]
+
+        train_source_counts = Counter(train_sources)
+        val_source_counts = Counter(val_sources)
+
+
+
     # Train loop
     for epoch in range(epochs):
 
@@ -206,7 +216,6 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         model.train()
         train_loss = 0
         source_train_losses = {}
-        source_batch_counts = {}
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1} - Training", leave=False):
             
@@ -237,10 +246,6 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
                     source_train_losses[source] = 0
                 source_train_losses[source] += loss.item()
 
-                if source not in source_batch_counts:
-                    source_batch_counts[source] = 0
-                source_batch_counts[source] += 1
-
             train_loss += batch_loss.item()
 
             # Backpropagation
@@ -251,8 +256,9 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         avg_train_loss = train_loss / len(train_loader.dataset)
 
         # Avg source losses
-        for source, loss in source_train_losses.items():
-            source_train_losses[source] = loss / source_batch_counts[source]
+        for label, loss in source_train_losses.items():
+            source = label_to_source(label)
+            source_train_losses[label] = loss / train_source_counts[source]
         
         log_entry.train_loss = avg_train_loss
         log_entry.source_train_losses = source_train_losses
@@ -264,7 +270,6 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         model.eval()
         val_loss = 0
         source_val_losses = {}
-        source_batch_counts = {}
 
         # Only need to compute label embeddings once since we're not training
         label_embeddings = model.get_text_features(label_ids, attention_mask=label_attn_masks)
@@ -296,16 +301,14 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
                         source_val_losses[source] = 0
                     source_val_losses[source] += loss.item()
 
-                    if source not in source_batch_counts:
-                        source_batch_counts[source] = 0
-                    source_batch_counts[source] += 1
             
             # Avg loss
-            final_val_loss = val_loss / len(val_loader)
+            final_val_loss = val_loss / len(val_loader.dataset)
             
             #Avg source losses
-            for source, loss in source_val_losses.items():
-                source_val_losses[source] = loss / source_batch_counts[source]
+            for label, loss in source_val_losses.items():
+                source = label_to_source(label)
+                source_val_losses[label] = loss / val_source_counts[source]
             
             log_entry.val_loss = final_val_loss
             log_entry.source_val_losses = source_val_losses
@@ -334,12 +337,13 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
             
                     source_accs = {}
                     for source, source_set in source_sets.items():
-                        source_loader = torch.utils.data.DataLoader(source_set, batch_size=32, shuffle=False, collate_fn=gtzan_collate)
+                        source_loader = torch.utils.data.DataLoader(source_set, batch_size=val_loader.batch_size, shuffle=False, collate_fn=gtzan_collate)
                         source_accs[source] = eval_laion_clap(model, 
                                                               val_loader = source_loader,
                                                               label_embeddings=label_embeddings,
                                                               top=top_k, desc=f"Evaluating {source} accuracy",
-                                                              leave=False)
+                                                              leave=False, 
+                                                            )
                     
                     # Calculate weighted average by source presence
                     total_samples = len(val_loader.dataset)
@@ -372,6 +376,12 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         with open(output_dir / "log.json", 'w') as f:
             json.dump(log_dicts, f)
         
+
+        if save_graphs:
+            pass
+        if save_cms:
+            pass
+
         #TODO: graphs, cm
-    
+
     torch.save(model.state_dict(), output_dir / f"model_final.pt")
