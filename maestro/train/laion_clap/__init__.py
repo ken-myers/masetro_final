@@ -267,7 +267,7 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         logger.dump_log(output_dir / "log.json")
         
         if save_graphs:
-            logger.dump_graphs(output_dir, graph_title)
+            logger.dump_graphs(graph_title, output_dir / "graphs.png")
 
         # TODO: cm
 

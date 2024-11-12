@@ -248,7 +248,7 @@ class GTZANLogger():
         
         return figures
 
-    def dump_graph(self, title, outpath):
+    def dump_graphs(self, title, outpath):
         figures = self._get_figures(title)
         _save_figures_as_collage_matplotlib(figures, outpath)
 
