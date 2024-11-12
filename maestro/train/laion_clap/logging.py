@@ -183,10 +183,6 @@ class GTZANLogger():
                 fig_acc_sources, ax_acc_sources = plt.subplots()
                 for source in sources:
 
-                    print(source)
-                    print(self.entries[0].source_accuracies)
-                    print(self.entries[0].source_accuracies.get(label_to_source(source), np.nan))
-
                     source_acc = [
                         entry.source_accuracies.get(label_to_source(source), np.nan) for entry in self.entries
                     ]
