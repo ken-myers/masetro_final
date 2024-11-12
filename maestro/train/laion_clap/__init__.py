@@ -7,110 +7,9 @@ import os
 from maestro.eval.gtzan import eval_laion_clap
 from maestro.constants import source_to_label, label_to_source
 from contextlib import nullcontext
-import json
 import numpy as np
 from collections import Counter
-class GTZANLogEntry:
-    def __init__(self, epoch, train_loss=None, val_loss=None,
-                 accuracy=None, source_accuracies=None,
-                 source_train_losses=None, source_val_losses=None, top_k=None):
-        self.epoch = epoch
-        self.train_loss = train_loss
-        self.val_loss = val_loss
-        self.accuracy = accuracy
-        self.top_k = top_k
-
-        self.source_accuracies = {} if source_accuracies is None else source_accuracies
-        self.source_train_losses = {} if source_train_losses is None else source_train_losses
-        self.source_val_losses = {} if source_val_losses is None else source_val_losses
-
-    def to_dict(self):
-        base_dict = {
-            'epoch': self.epoch,
-        }
-
-        # Add optional fields
-        if self.train_loss is not None:
-            base_dict['train_loss'] = self.train_loss
-        if self.val_loss is not None:
-            base_dict['val_loss'] = self.val_loss
-        if self.accuracy is not None:
-            # Convert numpy arrays to lists
-            if isinstance(self.accuracy, np.ndarray):
-                base_dict['accuracy'] = self.accuracy.tolist()
-            else:
-                base_dict['accuracy'] = self.accuracy
-        if self.top_k is not None:
-            base_dict['top_k'] = self.top_k
-        if len(self.source_accuracies) > 0:
-            # Convert numpy arrays in source_accuracies to lists
-            base_dict['source_accuracies'] = {
-                source: acc.tolist() if isinstance(acc, np.ndarray) else acc
-                for source, acc in self.source_accuracies.items()
-            }
-        if len(self.source_train_losses) > 0:
-            base_dict['source_train_losses'] = self.source_train_losses
-        if len(self.source_val_losses) > 0:
-            base_dict['source_val_losses'] = self.source_val_losses
-        
-        return base_dict
-
-
-    def print_train_loss(self):
-        #Print total loss
-        print(f"Epoch {self.epoch + 1} - Training loss: {self.train_loss:.3f}")
-
-        #Print source losses on one line
-        if len(self.source_train_losses) > 0:
-            line = "By source:"
-            for source, loss in self.source_train_losses.items():
-                line += f" {label_to_source(source)}: {loss:.3f},"
-            line = line[:-1] #Remove last comma
-            print(line)
-
-    def print_val_loss(self):
-        #Print total loss
-        print(f"Epoch {self.epoch + 1} - Validation loss: {self.val_loss:.3f}")
-
-        #Print source losses on one line
-        if len(self.source_val_losses) > 0:
-            line = "By source:"
-            for source, loss in self.source_val_losses.items():
-                line += f" {label_to_source(source)}: {loss:.3f},"
-            line = line[:-1]
-            print(line)
-
-    def print_accuracy(self):
-        if self.accuracy is None or self.top_k is None:
-            return
-        
-        if isinstance(self.top_k, int):
-            print(f"Epoch {self.epoch + 1} - Validation accuracy: {self.accuracy:.3f}")
-
-            if len(self.source_accuracies) > 0:
-                line = "By source:"
-                for source, acc in self.source_accuracies.items():
-                    line += f" {label_to_source(source)}: {acc}:.3f,"
-                line = line[:-1]
-                print(line)
-        else:
-            # Overall
-            msg = f"Epoch {self.epoch + 1} - Validation accuracy:"
-            for i, k in enumerate(self.top_k):
-                msg += f" @{k}: {self.accuracy[i]:.3f},"
-            msg = msg[:-1]
-            print(msg)
-
-            # By source
-            if len(self.source_accuracies) > 0:
-                for source, acc in self.source_accuracies.items():
-                    line = f"For source {source}:"
-                    for i, k in enumerate(self.top_k):
-                        line += f" @{k}: {acc[i]:.3f},"
-                    line = line[:-1]
-                    print(line)
-
-    
+from maestro.train.laion_clap.logging import GTZANLogger
 
 def gtzan_collate(batch):
     return {
@@ -159,8 +58,11 @@ def _gtzan_cross_entropy_loss_old(criterion, *, label_embeddings, audio_embeddin
 
 def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, device, optimizer, scheduler, label_ids, label_attn_masks,
                       loss_by_source=False ,source_weights=None, temperature = 1.0, disable_tokenizers_parallelism = True, clear_output_dir = False, 
-                      ckpt_interval = None, top_k=None, save_graphs=False, save_cms=False):
+                      ckpt_interval = None, top_k=None, save_graphs=False, save_cms=False, graph_title="GTZAN Model"):
     
+    # Init logger
+    logger = GTZANLogger(top_k=top_k, loss_by_source=loss_by_source)
+
     #Normalize source weights
     if source_weights is not None:
         source_weights = {source: weight / sum(source_weights.values()) for source, weight in source_weights.items()}
@@ -187,8 +89,6 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
     
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    log_dicts = []
-
     # Move model and constant tensors to device
     model.to(device)
     label_ids = label_ids.to(device)
@@ -207,10 +107,9 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
 
 
 
+
     # Train loop
     for epoch in range(epochs):
-
-        log_entry = GTZANLogEntry(epoch, top_k=top_k[0] if scalar_k else top_k)
 
         # ----- Training -----
         model.train()
@@ -260,11 +159,7 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
             source = label_to_source(label)
             source_train_losses[label] = loss / train_source_counts[source]
         
-        log_entry.train_loss = avg_train_loss
-        log_entry.source_train_losses = source_train_losses
-
-        log_entry.print_train_loss()
-
+        logger.train_loss(avg_train_loss, source_train_losses)
 
         # ----- Validation -----
         model.eval()
@@ -310,10 +205,7 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
                 source = label_to_source(label)
                 source_val_losses[label] = loss / val_source_counts[source]
             
-            log_entry.val_loss = final_val_loss
-            log_entry.source_val_losses = source_val_losses
-
-            log_entry.print_val_loss()
+            logger.val_loss(final_val_loss, source_val_losses)
 
             # Step the scheduler
             scheduler.step(final_val_loss)
@@ -355,33 +247,28 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
                         total_acc += acc_np * source_samples / total_samples
                     acc = total_acc
 
-                    log_entry.accuracy = acc
-                    log_entry.source_accuracies = source_accs
+                    logger.accuracy(acc, source_accs)
                 else:
                     acc = eval_laion_clap(model, 
                                           val_loader = val_loader,
                                           label_embeddings=label_embeddings,
                                           top=top_k,
                                           leave=False)
-                    log_entry.accuracy = acc
-                log_entry.print_accuracy()
+                    logger.accuracy(acc)
         
         # Save checkpoint
         if ckpt_interval is not None and epoch % ckpt_interval == 0:
             torch.save(model.state_dict(), output_dir / f"model_{epoch}.pt")
 
-        # Save log
-        log_dicts.append(log_entry.to_dict())
         
-        with open(output_dir / "log.json", 'w') as f:
-            json.dump(log_dicts, f)
-        
+        logger.step()
 
+        # Dump logs
+        logger.dump_log(output_dir / "log.json")
+        
         if save_graphs:
-            pass
-        if save_cms:
-            pass
+            logger.dump_graphs(output_dir, graph_title)
 
-        #TODO: graphs, cm
+        # TODO: cm
 
     torch.save(model.state_dict(), output_dir / f"model_final.pt")
