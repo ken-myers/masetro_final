@@ -227,8 +227,11 @@ class GTZANLogger():
                 if self.has_accuracy:
                     # Plot Accuracy on secondary y-axis
                     source_acc = [
-                        entry.source_accuracies.get(source, np.nan) for entry in self.entries
+                        entry.source_accuracies.get(label_to_source(source), np.nan) for entry in self.entries
                     ]
+                    if isinstance(self.top_k, list):
+                        source_acc = [acc[0] for acc in source_acc]
+
                     ax2_source = ax1_source.twinx()
                     ax2_source.plot(epochs, source_acc, label=f"Accuracy @{k}", color="green")
                     ax2_source.set_ylabel(f"Accuracy @{k}")
@@ -288,7 +291,7 @@ class GTZANLogEntry:
                 base_dict['accuracy'] = self.accuracy
         if self.top_k is not None:
             base_dict['top_k'] = self.top_k
-        if len(self.source_accuracies) > 0:
+        if self.source_accuracies is not None and len(self.source_accuracies) > 0:
             # Convert numpy arrays in source_accuracies to lists
             base_dict['source_accuracies'] = {
                 source: acc.tolist() if isinstance(acc, np.ndarray) else acc
@@ -333,7 +336,7 @@ class GTZANLogEntry:
         if isinstance(self.top_k, int):
             print(f"Epoch {self.epoch + 1} - Validation accuracy: {self.accuracy:.3f}")
 
-            if len(self.source_accuracies) > 0:
+            if self.source_accuracies is not None and len(self.source_accuracies) > 0:
                 line = "By source:"
                 for source, acc in self.source_accuracies.items():
                     line += f" {label_to_source(source)}: {acc}:.3f,"
@@ -348,7 +351,7 @@ class GTZANLogEntry:
             print(msg)
 
             # By source
-            if len(self.source_accuracies) > 0:
+            if self.source_accuracies is not None and len(self.source_accuracies) > 0:
                 for source, acc in self.source_accuracies.items():
                     line = f"For source {source}:"
                     for i, k in enumerate(self.top_k):
