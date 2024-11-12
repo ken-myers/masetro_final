@@ -17,6 +17,7 @@ else:
     from tqdm import tqdm
 
 def find_best_combination(sizes, counts, target):
+
     dp = [{} for _ in range(target + 1)]
     dp[0][tuple(0 for _ in sizes)] = True  # Base case
 
@@ -109,7 +110,7 @@ def stratify_split(dataset, *, stratify_key=None, stratify_labels = None, p_trai
             group_size_counts = Counter([len(group) for group in group_collection])
             total_items = sum(len(group) for group in group_collection)
             n_train = int(p_train * total_items)
-            n_val = sum(group_size_counts.values()) - n_train
+            n_val = total_items - n_train
             
             # Use DP to find the best combination of groups
             group_sizes = list(group_size_counts.keys())
