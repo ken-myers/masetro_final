@@ -1,7 +1,12 @@
 from torch.utils.data import Dataset, Subset
+import random 
 
 def filter_dataset(dataset, filter_fn):
     indices = [i for i, x in enumerate(dataset) if filter_fn(x)]
+    return Subset(dataset, indices)
+
+def random_subset(dataset, n):
+    indices = random.sample(range(len(dataset)), n)
     return Subset(dataset, indices)
 class RepeatDataset(Dataset):
     def __init__(self, base_dataset, length):
