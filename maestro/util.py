@@ -16,7 +16,8 @@ if is_ipython():
 else:
     from tqdm import tqdm
 
-def find_best_combination(sizes, counts, target):
+
+def _find_best_combination(sizes, counts, target):
 
     dp = [{} for _ in range(target + 1)]
     dp[0][tuple(0 for _ in sizes)] = True  # Base case
@@ -115,7 +116,7 @@ def stratify_split(dataset, *, stratify_key=None, stratify_labels = None, p_trai
             # Use DP to find the best combination of groups
             group_sizes = list(group_size_counts.keys())
             group_counts = list(group_size_counts.values())
-            best_combination = find_best_combination(group_sizes, group_counts, min(n_train, n_val))
+            best_combination = _find_best_combination(group_sizes, group_counts, min(n_train, n_val))
 
             if best_combination is None:
                 raise ValueError("Could not find a valid combination of groups")
