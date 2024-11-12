@@ -58,7 +58,8 @@ def _gtzan_cross_entropy_loss_old(criterion, *, label_embeddings, audio_embeddin
 
 def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, device, optimizer, scheduler, label_ids, label_attn_masks,
                       loss_by_source=False ,source_weights=None, temperature = 1.0, disable_tokenizers_parallelism = True, clear_output_dir = False, 
-                      ckpt_interval = None, top_k=None, save_graphs=False, save_cms=False, graph_title="GTZAN Model"):
+                      save_final=True, ckpt_interval = None, top_k=None, save_graphs=False, save_cms=False, graph_title="GTZAN Model",
+                      train_source_counts=None, val_source_counts=None):
     
     # Init logger
     logger = GTZANLogger(top_k=top_k, loss_by_source=loss_by_source)
@@ -98,12 +99,14 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
     criterion = nn.CrossEntropyLoss(reduction='sum')
 
     if loss_by_source:
-        # Count occurence of each source in tain train and val
-        train_sources = [item['source'] for item in train_loader.dataset]
-        val_sources = [item['source'] for item in val_loader.dataset]
+        if train_source_counts is None:
+            # Count occurence of each source in tain train and val
+            train_sources = [item['source'] for item in train_loader.dataset]
+            train_source_counts = Counter(train_sources)
 
-        train_source_counts = Counter(train_sources)
-        val_source_counts = Counter(val_sources)
+        if val_source_counts is None:
+            val_sources = [item['source'] for item in val_loader.dataset]
+            val_source_counts = Counter(val_sources)
 
 
 
@@ -270,5 +273,5 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
             logger.dump_graphs(graph_title, output_dir / "graphs.png")
 
         # TODO: cm
-
-    torch.save(model.state_dict(), output_dir / f"model_final.pt")
+    if save_final:
+        torch.save(model.state_dict(), output_dir / f"model_final.pt")
