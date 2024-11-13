@@ -275,3 +275,5 @@ def train_gtzan_model(*, output_dir, train_loader, val_loader, model, epochs, de
         # TODO: cm
     if save_final:
         torch.save(model.state_dict(), output_dir / f"model_final.pt")
+    
+    return logger.get_result()

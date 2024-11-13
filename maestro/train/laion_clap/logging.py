@@ -7,6 +7,16 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from maestro.constants import label_to_source
 
+class GTZANTrainingResult:
+    def __init__(self, logger):
+        self.logger = logger
+        
+    def max_accuracy(self):
+        if isinstance(self.logger.top_k, int):
+            return max([entry.accuracy for entry in self.logger.entries])
+        else:
+            return max([entry.accuracy[0] for entry in self.logger.entries])
+
 def _save_figures_as_collage_matplotlib(figures: List[plt.Figure], filename: str = "collage.png", cols: int = 2):
     """
     Saves a list of Matplotlib figures as a single collage image.
@@ -250,6 +260,9 @@ class GTZANLogger():
             f.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout to accommodate suptitle
         
         return figures
+
+    def get_result(self):
+        return GTZANTrainingResult(self)
 
     def dump_graphs(self, title, outpath):
         figures = self._get_figures(title)
