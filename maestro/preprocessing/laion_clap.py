@@ -41,6 +41,8 @@ def _init_worker(target_sample_rate_, resample_only_):
         global processor
         processor = ClapProcessor.from_pretrained("laion/larger_clap_music_and_speech")
 
+
+
 def _worker(args):
     # Get the input and output files
     in_file, out_file = args
@@ -152,4 +154,30 @@ def preprocess_synth(data_path, out_path, target_sample_rate, num_workers=1, res
 
     print(f"Finished processing synth dataset with {num_errors} errors")
     if num_errors > 0:
-        print("These errors were not accounted for in the data.json file. You should remove the corresponding records from the JSON manually.")
+        print("These errors were not accounted for in the data.json file. You should remove the corresponding records from the JSON manually.")\
+        
+
+
+
+
+def process_waveforms(input_dir, output_dir, sample_rate):
+    path = Path(input_dir)
+    
+    out_path = Path(output_dir)
+
+    processor = ClapProcessor.from_pretrained("laion/larger_clap_music_and_speech")
+
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    for file in tqdm(list(path.glob('*.pt'))):
+        waveform =  torch.load(file)
+        features = processor(
+            audios = [waveform.numpy()],
+            sampling_rate=sample_rate,
+            return_tensors="pt",
+            padding="repeatpad",
+            truncation="rand_trunc",
+            max_length_s=10
+        )['input_features']
+
+        torch.save(features.squeeze(0), out_path / f"{file.stem}.pt")

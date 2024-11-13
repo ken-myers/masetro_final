@@ -30,6 +30,11 @@ def main():
     laion_clap_subparsers = laion_clap_parser.add_subparsers(dest='data_origin')
 
 
+    #process waveforms
+    laion_process_parser = laion_clap_subparsers.add_parser('process')
+    laion_process_parser.add_argument('data_path', type=str, help='Path to the directory containing the wav files')
+    laion_process_parser.add_argument('out_path', type=str, help='Path to the directory to save the processed files')
+    laion_process_parser.add_argument('--sample_rate', type=int, default=48000, help='Sample rate of the output audio files')
     #synth
     laion_clap_synth_parser = laion_clap_subparsers.add_parser('synth')    
 
@@ -53,6 +58,9 @@ def main():
         elif args.data_origin == 'gtzan':
             from maestro.preprocessing.laion_clap import preprocess_gtzan
             preprocess_gtzan(input_dir=args.input_dir, output_dir=args.output_dir, target_sample_rate=args.target_sample_rate, num_workers=args.num_workers, resample_only=args.resample_only)
+        elif args.data_origin == 'process':
+            from maestro.preprocessing.laion_clap import process_waveforms
+            process_waveforms(input_dir=args.data_path, output_dir=args.out_path, sample_rate=args.sample_rate)
         else:
             raise ValueError(f"Unknown data origin: {args.data_origin}")
     elif args.mode == 'augment':
