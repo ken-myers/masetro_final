@@ -46,9 +46,19 @@ def _augment_worker(args):
     in_file, out_file = args
     
     waveform = torch.load(in_file).numpy()
-    new_waveform = augment(waveform, sample_rate=sample_rate)
-
-
+    failed = True
+    for _ in range(5):  
+        try:
+            new_waveform = augment(waveform, sample_rate=sample_rate)
+            failed = False
+            break
+        except:
+            continue
+    
+    if failed:
+        print(f"Failed to augment {in_file}")
+        return
+    
     #TODO: somehow make this more modular so that this code isnt duplicated
     input_features = processor(audios=[new_waveform], 
                                sampling_rate=sample_rate, 
