@@ -57,11 +57,6 @@ def _augment_worker(args):
                                truncation='rand_trunc',
                                max_length_s=10)['input_features'].squeeze(0)
 
-    feature_size = input_features.size()
-    if feature_size not in seen_sizes:
-        print("adding size", feature_size)
-        seen_sizes.add(feature_size)
-
 
     torch.save(input_features, out_file)
 
@@ -102,8 +97,15 @@ def augment_audio(data_path, *, sample_rate, length=None, aug_factor=None):
     with json_path.open("r") as f:
         data = json.load(f)
 
-    for i, d in enumerate(data):
-        d["num_augs"] = aug_counts.get(i, 0)
+    for i, (input_file, output_file) in tqdm(enumerate(in_outs), desc="Updating metadata", total=len(in_outs)):
+        input_stem = input_file.stem
+        original = next((x for x in data if x["filename"] == input_stem), None)
+        if original is None:
+            raise ValueError("Original file not found in metadata")
+        original = original.copy()
+        original["filename"] = f"augmented/{output_file.stem}"
+
+        data.append(original)
    
     with Pool(initializer=_init_augment_worker, initargs=(sample_rate,)) as p:
         for _ in tqdm(p.imap_unordered(_augment_worker, in_outs, chunksize=25), desc="Augmenting", total=len(in_outs)):
